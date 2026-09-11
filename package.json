@@ -1,0 +1,30 @@
+{
+  "name": "iot-face-authentication-system",
+  "version": "1.0.0",
+  "description": "ESP32-S3 Face Authentication Server & Real-time IoT Dashboard",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "sim": "node server/simulator/esp32_simulator.js"
+  },
+  "keywords": [
+    "esp32",
+    "esp32-s3",
+    "face-authentication",
+    "mqtt",
+    "iot",
+    "websocket",
+    "dashboard"
+  ],
+  "author": "Balaji Arunachalam <balaji060705@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mqtt": "^5.5.2",
+    "sqlite3": "^6.0.1",
+    "ws": "^8.16.0"
+  }
+}
