@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Authentication Dashboard | ESP32-S3 Access Control</title>
+  <meta name="description" content="Real-time biometric access control dashboard for ESP32-S3 IoT face authentication system.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="dashboard-wrapper">
+    <!-- Top Navigation Bar Box -->
+    <header class="app-header dashboard-box">
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-icon">
+            <i class="fa-solid fa-id-card-clip"></i>
+          </div>
+          <div class="brand-info">
+            <h1 class="brand-title">Face Authentication System</h1>
+            <span class="brand-subtitle">ESP32-S3 Biometric Terminal</span>
+          </div>
+        </div>
+
+        <div class="namespace-badge" title="Active MQTT Topic Namespace">
+          <span class="namespace-label">Topic:</span>
+          <code class="namespace-code">847291/583104/</code>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- MQTT Broker Connection Status -->
+        <div class="status-pill dashboard-box-nested" id="mqttStatusPill">
+          <span class="pulse-dot status-connected"></span>
+          <span id="mqttStatusText">MQTT: Connected</span>
+        </div>
+
+        <!-- ESP32 Device State Status -->
+        <div class="status-pill dashboard-box-nested" id="deviceStatusPill">
+          <i class="fa-solid fa-microchip"></i>
+          <span id="deviceStatusText">ESP32: Ready</span>
+        </div>
+
+        <!-- Sound Toggle Button -->
+        <button class="icon-btn dashboard-box-nested" id="soundToggleBtn" title="Toggle Sound Feedback" aria-label="Toggle Sound">
+          <i class="fa-solid fa-volume-high" id="soundIcon"></i>
+        </button>
+
+        <!-- Primary Action: Enroll Face -->
+        <button class="btn btn-primary" id="openEnrollModalBtn">
+          <i class="fa-solid fa-user-plus"></i>
+          <span>Enroll Face</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- KPI Metric Cards Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card dashboard-box">
+        <div class="kpi-header">
+          <span class="kpi-label">Registered Profiles</span>
+          <div class="kpi-icon-box icon-blue">
+            <i class="fa-solid fa-users"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <h2 class="kpi-value" id="kpiRegisteredUsers">0</h2>
+          <span class="kpi-subtext">Capacity: 10 biometric profiles</span>
+        </div>
+      </div>
+
+      <div class="kpi-card dashboard-box">
+        <div class="kpi-header">
+          <span class="kpi-label">Authorization Rate</span>
+          <div class="kpi-icon-box icon-green">
+            <i class="fa-solid fa-shield-check"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <h2 class="kpi-value" id="kpiPassRate">100%</h2>
+          <span class="kpi-subtext" id="kpiPassRateDetail">0 of 0 authorized</span>
+        </div>
+      </div>
+
+      <div class="kpi-card dashboard-box">
+        <div class="kpi-header">
+          <span class="kpi-label">Total Verifications</span>
+          <div class="kpi-icon-box icon-purple">
+            <i class="fa-solid fa-fingerprint"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <h2 class="kpi-value" id="kpiTotalEvents">0</h2>
+          <span class="kpi-subtext">Hardware verification logs</span>
+        </div>
+      </div>
+
+      <div class="kpi-card dashboard-box">
+        <div class="kpi-header">
+          <span class="kpi-label">Access Denied</span>
+          <div class="kpi-icon-box icon-red">
+            <i class="fa-solid fa-circle-xmark"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <h2 class="kpi-value" id="kpiIntruders">0</h2>
+          <span class="kpi-subtext">Unrecognized face attempts</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Grid Layout -->
+    <div class="main-layout">
+
+      <!-- Left Column: Hardware Telemetry & Live Activity Log -->
+      <section class="layout-col col-left">
+
+        <!-- Device Diagnostics Card -->
+        <div class="content-card dashboard-box">
+          <div class="card-header">
+            <div class="header-title-wrap">
+              <i class="fa-solid fa-microchip title-icon"></i>
+              <h3 class="card-title">Device Telemetry</h3>
+              <span class="badge badge-online" id="camBadgeOnline">Online</span>
+            </div>
+            <div class="sim-group">
+              <span class="sim-label">Test Simulator:</span>
+              <button class="btn btn-sm btn-outline-success" id="simAuthPassBtn" title="Simulate Authorized Verification">
+                <i class="fa-solid fa-check"></i> Grant Access
+              </button>
+              <button class="btn btn-sm btn-outline-danger" id="simAuthFailBtn" title="Simulate Denied Verification">
+                <i class="fa-solid fa-xmark"></i> Deny Access
+              </button>
+            </div>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="telemetry-box dashboard-box-nested">
+              <span class="tele-label">Camera Sensor</span>
+              <span class="tele-value" id="telemetryCam">OV2640 Active</span>
+            </div>
+            <div class="telemetry-box dashboard-box-nested">
+              <span class="tele-label">Storage</span>
+              <span class="tele-value" id="telemetrySD">MicroSD (FAT32)</span>
+            </div>
+            <div class="telemetry-box dashboard-box-nested">
+              <span class="tele-label">Match Threshold</span>
+              <span class="tele-value">0.70 Cosine</span>
+            </div>
+            <div class="telemetry-box dashboard-box-nested">
+              <span class="tele-label">Vector Dimension</span>
+              <span class="tele-value">512-dim Float</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Access Activity Stream Card -->
+        <div class="content-card dashboard-box">
+          <div class="card-header">
+            <div class="header-title-wrap">
+              <i class="fa-solid fa-clock-rotate-left title-icon"></i>
+              <h3 class="card-title">Live Access Log</h3>
+            </div>
+            <span class="live-pill"><span class="ping-dot"></span> Live Stream</span>
+          </div>
+
+          <div class="auth-feed-list" id="authFeedList">
+            <div class="empty-state">
+              <i class="fa-solid fa-circle-notch fa-spin"></i>
+              <p>Connecting to live event stream...</p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: User Management & Unrecognized Captures -->
+      <section class="layout-col col-right">
+
+        <!-- Enrolled Profiles Directory -->
+        <div class="content-card dashboard-box">
+          <div class="card-header">
+            <div class="header-title-wrap">
+              <i class="fa-solid fa-users title-icon"></i>
+              <h3 class="card-title">Enrolled Profiles</h3>
+            </div>
+            <button class="btn btn-sm btn-outline" id="refreshUsersBtn" title="Refresh Profile List">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table class="custom-table" id="usersTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Embeddings</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr>
+                  <td colspan="5" class="table-loading">Loading enrolled profiles...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Unrecognized Access Captures -->
+        <div class="content-card dashboard-box">
+          <div class="card-header">
+            <div class="header-title-wrap">
+              <i class="fa-solid fa-camera title-icon"></i>
+              <h3 class="card-title">Unrecognized Captures</h3>
+              <span class="count-pill" id="intruderCountBadge">0</span>
+            </div>
+            <span class="card-hint">Snapshots captured during denied access</span>
+          </div>
+
+          <div class="intruder-grid" id="intruderGrid">
+            <div class="empty-state">
+              <i class="fa-solid fa-shield-halved"></i>
+              <p>No unrecognized captures recorded yet.</p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Face Enrollment Modal Dialog -->
+  <div class="modal-backdrop" id="enrollModal">
+    <div class="modal-dialog dashboard-box">
+      <div class="modal-header">
+        <div class="header-title-wrap">
+          <i class="fa-solid fa-user-plus title-icon"></i>
+          <h3 class="modal-title">Enroll Face Profile</h3>
+        </div>
+        <button class="modal-close-btn" id="closeEnrollModalBtn" aria-label="Close dialog">&times;</button>
+      </div>
+
+      <!-- Step 1: Input Form -->
+      <div class="modal-step" id="enrollStep1">
+        <p class="modal-desc">Enter the user details. The ESP32-S3 camera will capture 10 facial angle samples to generate the biometric embeddings vector.</p>
+
+        <form id="enrollForm">
+          <div class="form-group">
+            <label for="enrollUserId" class="form-label">User ID (Optional, 1–10)</label>
+            <input type="number" id="enrollUserId" min="1" max="10" placeholder="Auto-assign next available slot" class="form-input">
+            <span class="form-hint">Unique slot index stored on device MicroSD database.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="enrollUserName" class="form-label">Full Name</label>
+            <input type="text" id="enrollUserName" required placeholder="e.g. Alex Morgan" class="form-input">
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="cancelEnrollBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="startEnrollBtn">
+              <i class="fa-solid fa-camera"></i>
+              <span>Start Enrollment</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Step 2: Sampling Progress -->
+      <div class="modal-step hidden" id="enrollStep2">
+        <div class="progress-container">
+          <div class="progress-counter">
+            <span class="counter-num" id="captureCurrentNum">0</span>
+            <span class="counter-slash">/</span>
+            <span class="counter-total" id="captureTotalNum">10</span>
+          </div>
+          <span class="counter-label">Biometric Samples Captured</span>
+
+          <!-- 10 Step Indicators -->
+          <div class="step-ticks" id="stepTicksContainer">
+            <span class="tick dashboard-box-nested">1</span>
+            <span class="tick dashboard-box-nested">2</span>
+            <span class="tick dashboard-box-nested">3</span>
+            <span class="tick dashboard-box-nested">4</span>
+            <span class="tick dashboard-box-nested">5</span>
+            <span class="tick dashboard-box-nested">6</span>
+            <span class="tick dashboard-box-nested">7</span>
+            <span class="tick dashboard-box-nested">8</span>
+            <span class="tick dashboard-box-nested">9</span>
+            <span class="tick dashboard-box-nested">10</span>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-track dashboard-box-nested">
+            <div class="progress-fill" id="captureProgressBar" style="width: 0%;"></div>
+          </div>
+
+          <!-- Guidance Box -->
+          <div class="guidance-box dashboard-box-nested" id="captureGuidanceBox">
+            <i class="fa-solid fa-circle-info"></i>
+            <span id="guidanceText">Please position your face directly in front of the ESP32 camera...</span>
+          </div>
+
+          <div class="modal-footer justify-center">
+            <button type="button" class="btn btn-sm btn-outline" id="simStepBtn">
+              <i class="fa-solid fa-forward-step"></i> Simulate Next Sample
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Success View -->
+      <div class="modal-step hidden" id="enrollStep3">
+        <div class="success-container">
+          <div class="success-icon-wrap">
+            <i class="fa-solid fa-check"></i>
+          </div>
+          <h4 class="success-title">Enrollment Complete</h4>
+          <p class="modal-desc" id="successMessageText">10 face samples have been saved to the device database.</p>
+
+          <div class="summary-card dashboard-box-nested">
+            <div class="summary-row">
+              <span class="summary-label">Name</span>
+              <strong class="summary-val" id="summaryUserName">-</strong>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">User ID</span>
+              <strong class="summary-val" id="summaryUserId">-</strong>
+            </div>
+            <div class="summary-row">
+              <span class="summary-label">Biometric Embeddings</span>
+              <span class="text-green font-medium">10 of 10 Stored</span>
+            </div>
+          </div>
+
+          <div class="modal-footer justify-center">
+            <button type="button" class="btn btn-primary" id="finishEnrollBtn">Done</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Snapshot Lightbox Modal -->
+  <div class="modal-backdrop" id="imageLightboxModal">
+    <div class="lightbox-dialog dashboard-box">
+      <div class="modal-header">
+        <div class="header-title-wrap">
+          <i class="fa-solid fa-image title-icon"></i>
+          <h3 class="modal-title">Verification Snapshot</h3>
+        </div>
+        <button class="modal-close-btn" id="closeLightboxBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="lightbox-body">
+        <div class="lightbox-img-box dashboard-box-nested">
+          <img id="lightboxImg" src="" alt="Capture Snapshot">
+        </div>
+        <div class="lightbox-meta">
+          <div class="meta-row">
+            <span class="meta-label">Capture Timestamp</span>
+            <span class="meta-val" id="lightboxTime">-</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Similarity Score</span>
+            <span class="meta-val text-red" id="lightboxSimilarity">-</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Decision</span>
+            <span class="badge badge-denied">Denied (Threshold: 0.70)</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Device</span>
+            <span class="meta-val">ESP32-S3-CAM Access Terminal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
