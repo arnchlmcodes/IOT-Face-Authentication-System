@@ -5,12 +5,14 @@ const MQTT_TOPICS = {
   // Commands (Backend -> ESP32)
   commandRegister: "847291/583104/command/register",
   commandDelete: "847291/583104/command/delete",
+  commandUnlock: "847291/583104/command/unlock",
 
   // Events (ESP32 -> Backend)
   eventRegistration: "847291/583104/event/registration",
   eventDeletion: "847291/583104/event/deletion",
   eventAuth: "847291/583104/event/auth",
   eventAuthImage: "847291/583104/event/auth/image",
+  eventLock: "847291/583104/event/lock",
 
   // Subscription pattern
   eventSubscription: "847291/583104/event/#",

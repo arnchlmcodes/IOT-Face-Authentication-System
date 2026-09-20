@@ -1,6 +1,6 @@
 /**
  * ESP32-S3 Face Authentication Hub - Frontend Controller
- * WebSocket real-time client, REST API integration, and audio cues
+ * WebSocket real-time client, REST API integration, audio cues, SD card log synchronization
  */
 
 // Application State
@@ -9,6 +9,8 @@ const state = {
   wsConnected: false,
   soundEnabled: true,
   currentEnrollment: null,
+  currentLightboxEventId: null,
+  pendingDeleteId: null,
   audioCtx: null
 };
 
@@ -47,7 +49,6 @@ function playSound(type) {
     gain.connect(state.audioCtx.destination);
 
     if (type === 'authorized') {
-      // Pleasant futuristic double chime
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now); // C5
       osc.frequency.exponentialRampToValueAtTime(880, now + 0.12); // A5
@@ -56,7 +57,6 @@ function playSound(type) {
       osc.start(now);
       osc.stop(now + 0.35);
     } else if (type === 'denied') {
-      // Low dual cyber alert tone
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(140, now);
       osc.frequency.exponentialRampToValueAtTime(80, now + 0.25);
@@ -65,7 +65,6 @@ function playSound(type) {
       osc.start(now);
       osc.stop(now + 0.3);
     } else if (type === 'capture') {
-      // Subtle shutter click
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(1200, now);
       osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
@@ -85,6 +84,11 @@ const elements = {
   mqttStatusText: document.getElementById('mqttStatusText'),
   deviceStatusPill: document.getElementById('deviceStatusPill'),
   deviceStatusText: document.getElementById('deviceStatusText'),
+  doorStatusPill: document.getElementById('doorStatusPill'),
+  doorStatusText: document.getElementById('doorStatusText'),
+  doorLockIcon: document.getElementById('doorLockIcon'),
+  manualUnlockBtn: document.getElementById('manualUnlockBtn'),
+  openSyncModalBtn: document.getElementById('openSyncModalBtn'),
   soundToggleBtn: document.getElementById('soundToggleBtn'),
   soundIcon: document.getElementById('soundIcon'),
 
@@ -97,11 +101,14 @@ const elements = {
 
   // Feeds & Tables
   authFeedList: document.getElementById('authFeedList'),
+  refreshFeedBtn: document.getElementById('refreshFeedBtn'),
+  clearAllLogsBtn: document.getElementById('clearAllLogsBtn'),
   usersTableBody: document.getElementById('usersTableBody'),
   intruderGrid: document.getElementById('intruderGrid'),
   intruderCountBadge: document.getElementById('intruderCountBadge'),
+  refreshUsersBtn: document.getElementById('refreshUsersBtn'),
 
-  // Modals
+  // Enrollment Modal
   openEnrollModalBtn: document.getElementById('openEnrollModalBtn'),
   enrollModal: document.getElementById('enrollModal'),
   closeEnrollModalBtn: document.getElementById('closeEnrollModalBtn'),
@@ -120,19 +127,39 @@ const elements = {
   summaryUserName: document.getElementById('summaryUserName'),
   summaryUserId: document.getElementById('summaryUserId'),
   finishEnrollBtn: document.getElementById('finishEnrollBtn'),
-  simStepBtn: document.getElementById('simStepBtn'),
 
-  // Lightbox
+  // Lightbox Modal
   imageLightboxModal: document.getElementById('imageLightboxModal'),
   closeLightboxBtn: document.getElementById('closeLightboxBtn'),
   lightboxImg: document.getElementById('lightboxImg'),
   lightboxTime: document.getElementById('lightboxTime'),
   lightboxSimilarity: document.getElementById('lightboxSimilarity'),
+  lightboxDeleteBtn: document.getElementById('lightboxDeleteBtn'),
 
-  // Simulators
-  simAuthPassBtn: document.getElementById('simAuthPassBtn'),
-  simAuthFailBtn: document.getElementById('simAuthFailBtn'),
-  refreshUsersBtn: document.getElementById('refreshUsersBtn'),
+  // SD Sync Modal
+  syncModal: document.getElementById('syncModal'),
+  closeSyncModalBtn: document.getElementById('closeSyncModalBtn'),
+  eventsDropzone: document.getElementById('eventsDropzone'),
+  eventsFileInput: document.getElementById('eventsFileInput'),
+  eventsDropText: document.getElementById('eventsDropText'),
+  uploadEventsBtn: document.getElementById('uploadEventsBtn'),
+  usersDropzone: document.getElementById('usersDropzone'),
+  usersFileInput: document.getElementById('usersFileInput'),
+  usersDropText: document.getElementById('usersDropText'),
+  uploadUsersBtn: document.getElementById('uploadUsersBtn'),
+  syncResultsBox: document.getElementById('syncResultsBox'),
+  syncResultsTitle: document.getElementById('syncResultsTitle'),
+  syncStatsGrid: document.getElementById('syncStatsGrid'),
+
+  // Delete Confirm Modal
+  deleteConfirmModal: document.getElementById('deleteConfirmModal'),
+  closeDeleteModalBtn: document.getElementById('closeDeleteModalBtn'),
+  cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
+  confirmDeleteActionBtn: document.getElementById('confirmDeleteActionBtn'),
+  deleteConfirmTitle: document.getElementById('deleteConfirmTitle'),
+  deleteConfirmText: document.getElementById('deleteConfirmText'),
+  confirmDeleteBtnText: document.getElementById('confirmDeleteBtnText'),
+
   toastContainer: document.getElementById('toastContainer')
 };
 
@@ -212,12 +239,22 @@ function handleIncomingEvent(msg) {
       if (data.deviceState) updateDeviceBusyUI(data.deviceState);
       break;
 
+    case 'door_lock':
+      updateDoorUI(data.status, data.source);
+      break;
+
     case 'authentication_authorized':
       renderAuthFeedItem({
+        id: data.eventId,
         status: 'authorized',
         user_name: data.name,
         user_id: data.id,
         similarity: data.similarity,
+        first_similarity: data.first_similarity,
+        second_similarity: data.second_similarity,
+        threshold: data.threshold || 0.65,
+        embedding_delta: data.embedding_delta,
+        source: data.source || 'face',
         created_at: data.timestamp
       }, true);
       playSound('authorized');
@@ -226,9 +263,17 @@ function handleIncomingEvent(msg) {
 
     case 'authentication_denied':
       renderAuthFeedItem({
+        id: data.eventId,
         status: 'denied',
-        user_name: 'Unrecognized Person',
+        user_name: data.candidate_name ? `Unrecognized (Candidate: ${data.candidate_name})` : 'Unrecognized Person',
+        user_id: data.candidate_id || -1,
         similarity: data.similarity,
+        first_similarity: data.first_similarity,
+        second_similarity: data.second_similarity,
+        threshold: data.threshold || 0.65,
+        embedding_delta: data.embedding_delta,
+        reason: data.reason,
+        source: data.source || 'face',
         created_at: data.timestamp
       }, true);
       playSound('denied');
@@ -236,7 +281,7 @@ function handleIncomingEvent(msg) {
       break;
 
     case 'intruder_image':
-      attachIntruderImageToLatestFeed(data.imagePath);
+      attachIntruderImageToLatestFeed(data.imagePath, data.eventId);
       prependIntruderGalleryItem(data);
       fetchStats();
       break;
@@ -270,6 +315,23 @@ function handleIncomingEvent(msg) {
       fetchUsers();
       break;
 
+    case 'log_deleted':
+      removeFeedItemFromDOM(data.id);
+      fetchIntruders();
+      fetchStats();
+      break;
+
+    case 'logs_cleared':
+      elements.authFeedList.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-id-badge"></i>
+          <p>No verification events recorded yet.</p>
+        </div>
+      `;
+      fetchIntruders();
+      fetchStats();
+      break;
+
     default:
       console.log('Hub event:', event, data);
   }
@@ -301,6 +363,21 @@ function updateDeviceBusyUI(deviceState) {
   } else {
     elements.deviceStatusPill.style.borderColor = 'var(--border-subtle)';
     elements.deviceStatusText.textContent = 'ESP32: Ready';
+  }
+}
+
+function updateDoorUI(status, source) {
+  if (!elements.doorStatusPill) return;
+  if (status === 'unlocked') {
+    elements.doorStatusText.textContent = `Door: Unlocked (${source || 'relay'})`;
+    elements.doorLockIcon.className = 'fa-solid fa-lock-open';
+    elements.doorStatusPill.style.borderColor = 'var(--color-green)';
+    elements.doorStatusPill.style.color = 'var(--color-green)';
+  } else {
+    elements.doorStatusText.textContent = 'Door: Locked';
+    elements.doorLockIcon.className = 'fa-solid fa-lock';
+    elements.doorStatusPill.style.borderColor = 'var(--border-subtle)';
+    elements.doorStatusPill.style.color = 'var(--text-secondary)';
   }
 }
 
@@ -373,10 +450,177 @@ window.deleteUser = async function (id, name) {
   }
 };
 
+// ============================================================================
+// Custom In-App Deletion Modal Handling (Reliable & Never Blocked)
+// ============================================================================
+
+function openDeleteConfirm(id, title, message) {
+  state.pendingDeleteId = id;
+  if (title && elements.deleteConfirmTitle) elements.deleteConfirmTitle.textContent = title;
+  if (message && elements.deleteConfirmText) elements.deleteConfirmText.textContent = message;
+  if (elements.confirmDeleteBtnText) {
+    elements.confirmDeleteBtnText.textContent = id === 'all' ? 'Clear All' : 'Delete';
+  }
+  if (elements.deleteConfirmModal) elements.deleteConfirmModal.classList.add('active');
+}
+
+function closeDeleteConfirm() {
+  if (elements.deleteConfirmModal) elements.deleteConfirmModal.classList.remove('active');
+  state.pendingDeleteId = null;
+}
+
+if (elements.closeDeleteModalBtn) elements.closeDeleteModalBtn.addEventListener('click', closeDeleteConfirm);
+if (elements.cancelDeleteBtn) elements.cancelDeleteBtn.addEventListener('click', closeDeleteConfirm);
+
+if (elements.confirmDeleteActionBtn) {
+  elements.confirmDeleteActionBtn.addEventListener('click', async () => {
+    const id = state.pendingDeleteId;
+    if (!id) return;
+
+    elements.confirmDeleteActionBtn.disabled = true;
+    elements.confirmDeleteActionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting...';
+
+    try {
+      const url = id === 'all' ? '/api/smart-lock/logs' : `/api/smart-lock/logs/${id}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      const data = await res.json();
+
+      if (data.ok || data.success) {
+        if (id === 'all') {
+          showToast('All logs and stored images cleared', 'success');
+          elements.authFeedList.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-id-badge"></i>
+              <p>No verification events recorded yet.</p>
+            </div>
+          `;
+        } else {
+          showToast(`Log #${id} and associated image deleted`, 'success');
+          removeFeedItemFromDOM(id);
+        }
+
+        if (state.currentLightboxEventId === id || id === 'all') {
+          elements.imageLightboxModal.classList.remove('active');
+          state.currentLightboxEventId = null;
+        }
+
+        closeDeleteConfirm();
+        syncWithEndpoints(false);
+      } else {
+        showToast(data.error || 'Failed to delete log', 'error');
+      }
+    } catch (err) {
+      showToast('Network error during deletion: ' + err.message, 'error');
+    } finally {
+      elements.confirmDeleteActionBtn.disabled = false;
+      elements.confirmDeleteActionBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> <span id="confirmDeleteBtnText">Delete</span>';
+    }
+  });
+}
+
+// Global hook for deleting individual logs
+window.deleteLog = function (id, event) {
+  if (event) {
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+  }
+  openDeleteConfirm(
+    id,
+    `Delete Log Record #${id}`,
+    `Are you sure you want to permanently delete log record #${id} and remove its stored image from disk?`
+  );
+};
+
+// Clear all logs button handler
+if (elements.clearAllLogsBtn) {
+  elements.clearAllLogsBtn.addEventListener('click', () => {
+    openDeleteConfirm(
+      'all',
+      'Clear All Access Logs',
+      'Are you sure you want to permanently delete ALL verification logs and stored intruder images from the system?'
+    );
+  });
+}
+
+function removeFeedItemFromDOM(id) {
+  const item = elements.authFeedList.querySelector(`[data-event-id="${id}"]`);
+  if (item) {
+    item.style.opacity = '0';
+    item.style.transform = 'scale(0.95)';
+    setTimeout(() => item.remove(), 250);
+  }
+}
+
+// ============================================================================
+// Endpoint Synchronization on Manual Refresh & Page Load
+// ============================================================================
+
+async function syncWithEndpoints(showNotice = false) {
+  try {
+    // 1. Fetch latest processed logs & statistics directly from GET /api/smart-lock/logs
+    const logsRes = await fetch('/api/smart-lock/logs');
+    const logsData = await logsRes.json();
+
+    if (logsData.ok && Array.isArray(logsData.latest)) {
+      renderAuthFeedList(logsData.latest);
+      if (logsData.summary) {
+        updateStatsFromSummary(logsData.summary, logsData.total_records, logsData.registered_users);
+      }
+    } else {
+      await fetchAuthHistory();
+    }
+
+    // 2. Fetch latest registered users from GET /api/smart-lock/users
+    const usersRes = await fetch('/api/smart-lock/users');
+    const usersData = await usersRes.json();
+    if (usersData.ok && Array.isArray(usersData.users)) {
+      renderUsersTable(usersData.users);
+      if (elements.kpiRegisteredUsers) {
+        elements.kpiRegisteredUsers.textContent = usersData.users.length;
+      }
+    } else {
+      await fetchUsers();
+    }
+
+    // 3. Fetch intruders and stats
+    await fetchIntruders();
+    await fetchStats();
+
+    if (showNotice) {
+      showToast('Synchronized with smart lock endpoints', 'success');
+    }
+  } catch (err) {
+    console.warn('Endpoint sync fallback:', err);
+    await fetchAuthHistory();
+    await fetchUsers();
+    await fetchStats();
+    await fetchIntruders();
+  }
+}
+
+function updateStatsFromSummary(summary, total, users) {
+  if (elements.kpiTotalEvents) elements.kpiTotalEvents.textContent = total || 0;
+  if (elements.kpiIntruders) elements.kpiIntruders.textContent = summary.authentication_denied || 0;
+  if (elements.kpiRegisteredUsers && Array.isArray(users)) {
+    elements.kpiRegisteredUsers.textContent = users.length;
+  }
+  const passRate = total > 0 ? Math.round(((summary.authentication_authorized || 0) / total) * 100) : 100;
+  if (elements.kpiPassRate) elements.kpiPassRate.textContent = `${passRate}%`;
+  if (elements.kpiPassRateDetail) {
+    elements.kpiPassRateDetail.textContent = `${summary.authentication_authorized || 0} of ${total} authorized`;
+  }
+}
+
+if (elements.refreshFeedBtn) {
+  elements.refreshFeedBtn.addEventListener('click', () => {
+    syncWithEndpoints(true);
+  });
+}
+
 // Fetch and render live authentication feed
 async function fetchAuthHistory() {
   try {
-    const res = await fetch('/api/auth/history?limit=25');
+    const res = await fetch('/api/auth/history?limit=30');
     const data = await res.json();
     if (data.success) {
       renderAuthFeedList(data.events);
@@ -391,7 +635,7 @@ function renderAuthFeedList(events) {
     elements.authFeedList.innerHTML = `
       <div class="empty-state">
         <i class="fa-solid fa-id-badge"></i>
-        <p>No verification events recorded yet. Press GPIO 1 on ESP32 to test.</p>
+        <p>No verification events recorded yet. Press physical button on ESP32 or sync SD logs to populate.</p>
       </div>
     `;
     return;
@@ -403,61 +647,83 @@ function renderAuthFeedList(events) {
 
 function renderAuthFeedItem(evt, prepend = false) {
   const isAuth = evt.status === 'authorized';
+  const isLock = evt.event_type === 'lock' || evt.status === 'unlocked' || evt.status === 'locked';
   const item = document.createElement('div');
-  item.className = `auth-feed-item ${isAuth ? 'authorized' : 'denied'}`;
+  item.className = `auth-feed-item ${isLock ? 'lock' : (isAuth ? 'authorized' : 'denied')}`;
+  if (evt.id) {
+    item.setAttribute('data-event-id', evt.id);
+  }
 
-  const formattedTime = formatTimestamp(evt.created_at);
+  const formattedTime = formatTimestamp(evt.created_at || evt.timestamp);
   const similarityScore = evt.similarity !== null && evt.similarity !== undefined
     ? Number(evt.similarity).toFixed(3)
-    : (isAuth ? '0.890' : '0.412');
+    : (isAuth ? '0.750' : (isLock ? '-' : '0.412'));
 
-  const similarityClass = isAuth ? 'high' : 'low';
+  const similarityClass = isAuth ? 'high' : (isLock ? 'neutral' : 'low');
+
+  let metaText = '';
+  if (isLock) {
+    metaText = `Door ${evt.status} (${evt.source || 'system'}) • ${formattedTime}`;
+  } else if (isAuth) {
+    metaText = `User ID #${evt.user_id || 1} • Match: 65% • ${formattedTime}`;
+  } else {
+    metaText = `Threshold: 0.65 • ${evt.reason ? escapeHtml(evt.reason) : 'Unrecognized Face'} • ${formattedTime}`;
+  }
+
+  let extraSimDetails = '';
+  if (evt.first_similarity !== null && evt.first_similarity !== undefined && evt.second_similarity !== null && evt.second_similarity !== undefined) {
+    extraSimDetails = `<span class="sim-sub-detail">F1: ${Number(evt.first_similarity).toFixed(3)} | F2: ${Number(evt.second_similarity).toFixed(3)}</span>`;
+  }
 
   item.innerHTML = `
     <div class="feed-item-left">
-      <div class="feed-avatar ${isAuth ? 'auth' : 'denied'}">
-        <i class="fa-solid ${isAuth ? 'fa-user-check' : 'fa-user-xmark'}"></i>
+      <div class="feed-avatar ${isLock ? 'lock' : (isAuth ? 'auth' : 'denied')}">
+        <i class="fa-solid ${isLock ? (evt.status === 'unlocked' ? 'fa-lock-open' : 'fa-lock') : (isAuth ? 'fa-user-check' : 'fa-user-xmark')}"></i>
       </div>
       <div class="feed-user-details">
-        <span class="feed-user-name">${escapeHtml(evt.user_name || (isAuth ? 'Authorized User' : 'Unrecognized Person'))}</span>
-        <span class="feed-user-meta">
-          ${isAuth ? `User ID #${evt.user_id}` : 'Threshold: 0.70'} • ${formattedTime}
-        </span>
+        <span class="feed-user-name">${escapeHtml(evt.name || evt.user_name || (isAuth ? 'Authorized User' : 'Unrecognized Person'))}</span>
+        <span class="feed-user-meta">${metaText}</span>
+        ${extraSimDetails}
       </div>
     </div>
     <div class="feed-item-right">
-      <span class="similarity-pill ${similarityClass}">
-        <i class="fa-solid fa-chart-simple"></i> ${similarityScore}
-      </span>
+      ${!isLock ? `
+        <span class="similarity-pill ${similarityClass}">
+          <i class="fa-solid fa-chart-simple"></i> ${similarityScore}
+        </span>
+      ` : ''}
       ${evt.image_path ? `
-        <button class="feed-thumbnail-btn" onclick="window.openLightbox('${evt.image_path}', '${similarityScore}', '${formattedTime}')">
+        <button class="feed-thumbnail-btn" onclick="window.openLightbox('${evt.image_path}', '${similarityScore}', '${formattedTime}', ${evt.id || 'null'})" title="View snapshot">
           <img src="${evt.image_path}" class="feed-thumb-img" alt="Intruder Snapshot">
+        </button>
+      ` : ''}
+      ${evt.id ? `
+        <button class="btn-delete-log-item" onclick="window.deleteLog(${evt.id}, event)" title="Delete log entry & image">
+          <i class="fa-solid fa-trash-can"></i>
         </button>
       ` : ''}
     </div>
   `;
 
   if (prepend && elements.authFeedList.firstChild) {
-    // Remove empty state if present
     const emptyState = elements.authFeedList.querySelector('.empty-state');
     if (emptyState) emptyState.remove();
-
     elements.authFeedList.insertBefore(item, elements.authFeedList.firstChild);
   } else {
     elements.authFeedList.appendChild(item);
   }
 }
 
-function attachIntruderImageToLatestFeed(imagePath) {
+function attachIntruderImageToLatestFeed(imagePath, eventId = null) {
   const latestDenied = elements.authFeedList.querySelector('.auth-feed-item.denied');
   if (latestDenied) {
     const rightCol = latestDenied.querySelector('.feed-item-right');
     if (rightCol && !rightCol.querySelector('.feed-thumb-img')) {
       const btn = document.createElement('button');
       btn.className = 'feed-thumbnail-btn';
-      btn.onclick = () => window.openLightbox(imagePath, '0.420', 'Just now');
+      btn.onclick = () => window.openLightbox(imagePath, '0.420', 'Just now', eventId);
       btn.innerHTML = `<img src="${imagePath}" class="feed-thumb-img" alt="Intruder Snapshot">`;
-      rightCol.appendChild(btn);
+      rightCol.insertBefore(btn, rightCol.firstChild);
     }
   }
 }
@@ -489,8 +755,11 @@ function renderIntruderGrid(intruders) {
   }
 
   elements.intruderGrid.innerHTML = intruders.map(item => `
-    <div class="intruder-card" onclick="window.openLightbox('${item.image_path}', '${Number(item.similarity || 0.42).toFixed(3)}', '${formatTimestamp(item.created_at)}')">
+    <div class="intruder-card" onclick="window.openLightbox('${item.image_path}', '${Number(item.similarity || 0.42).toFixed(3)}', '${formatTimestamp(item.created_at)}', ${item.id})">
       <img src="${item.image_path}" alt="Intruder Capture" loading="lazy">
+      <button class="intruder-trash-btn" onclick="window.deleteLog(${item.id}, event)" title="Delete snapshot & log">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
       <div class="intruder-overlay">
         <span class="intruder-score"><i class="fa-solid fa-triangle-exclamation"></i> ${Number(item.similarity || 0.42).toFixed(3)}</span>
         <span class="intruder-time">${formatTimestamp(item.created_at)}</span>
@@ -505,9 +774,14 @@ function prependIntruderGalleryItem(data) {
 
   const card = document.createElement('div');
   card.className = 'intruder-card';
-  card.onclick = () => window.openLightbox(data.imagePath, Number(data.similarity || 0.42).toFixed(3), 'Just now');
+  card.onclick = () => window.openLightbox(data.imagePath, Number(data.similarity || 0.42).toFixed(3), 'Just now', data.eventId);
   card.innerHTML = `
     <img src="${data.imagePath}" alt="Intruder Capture">
+    ${data.eventId ? `
+      <button class="intruder-trash-btn" onclick="window.deleteLog(${data.eventId}, event)" title="Delete snapshot & log">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    ` : ''}
     <div class="intruder-overlay">
       <span class="intruder-score"><i class="fa-solid fa-triangle-exclamation"></i> ${Number(data.similarity || 0.42).toFixed(3)}</span>
       <span class="intruder-time">Just now</span>
@@ -519,7 +793,7 @@ function prependIntruderGalleryItem(data) {
   elements.intruderCountBadge.textContent = currentCount + 1;
 }
 
-// Fetch KPI statistics
+// Fetch KPI metrics
 async function fetchStats() {
   try {
     const res = await fetch('/api/stats');
@@ -527,10 +801,10 @@ async function fetchStats() {
     if (data.success) {
       const { registeredUsers, totalEvents, authorizedCount, deniedCount, passRate } = data.stats;
       elements.kpiRegisteredUsers.textContent = registeredUsers;
-      elements.kpiTotalEvents.textContent = totalEvents;
-      elements.kpiIntruders.textContent = deniedCount;
       elements.kpiPassRate.textContent = `${passRate}%`;
       elements.kpiPassRateDetail.textContent = `${authorizedCount} of ${totalEvents} authorized`;
+      elements.kpiTotalEvents.textContent = totalEvents;
+      elements.kpiIntruders.textContent = deniedCount;
     }
   } catch (err) {
     console.error('Failed to load stats:', err);
@@ -538,16 +812,16 @@ async function fetchStats() {
 }
 
 // ============================================================================
-// Enrollment Modal & Async Progress Flow
+// Enrollment Modal Lifecycle
 // ============================================================================
 
 function openEnrollModal() {
-  initAudio();
+  elements.enrollModal.classList.add('active');
   elements.enrollStep1.classList.remove('hidden');
   elements.enrollStep2.classList.add('hidden');
   elements.enrollStep3.classList.add('hidden');
   elements.enrollForm.reset();
-  elements.enrollModal.classList.add('active');
+  state.currentEnrollment = null;
 }
 
 function closeEnrollModal() {
@@ -558,45 +832,46 @@ function closeEnrollModal() {
 elements.openEnrollModalBtn.addEventListener('click', openEnrollModal);
 elements.closeEnrollModalBtn.addEventListener('click', closeEnrollModal);
 elements.cancelEnrollBtn.addEventListener('click', closeEnrollModal);
-elements.finishEnrollBtn.addEventListener('click', closeEnrollModal);
+elements.finishEnrollBtn.addEventListener('click', () => {
+  closeEnrollModal();
+  fetchUsers();
+});
 
 // Submit Enrollment
 elements.enrollForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const idVal = elements.enrollUserId.value.trim();
-  const nameVal = elements.enrollUserName.value.trim();
+  initAudio();
 
-  if (!nameVal) return;
+  const name = elements.enrollUserName.value.trim();
+  const idVal = elements.enrollUserId.value;
+  const id = idVal ? Number(idVal) : null;
+
+  if (!name) return;
 
   try {
     const res = await fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: idVal ? Number(idVal) : undefined,
-        name: nameVal
-      })
+      body: JSON.stringify({ id, name })
     });
 
     const data = await res.json();
-
-    if (data.success) {
-      state.currentEnrollment = data.user;
-      elements.enrollStep1.classList.add('hidden');
-      elements.enrollStep2.classList.remove('hidden');
-      elements.captureCurrentNum.textContent = '0';
-      elements.captureTotalNum.textContent = '10';
-      elements.captureProgressBar.style.width = '0%';
-      elements.guidanceText.textContent = GUIDANCE_STEPS[0];
-
-      // Reset step ticks
-      const ticks = elements.stepTicksContainer.querySelectorAll('.tick');
-      ticks.forEach(t => t.classList.remove('active'));
-
-      showToast(`Initiated face enrollment for ${nameVal}. Please face the camera.`, 'info');
-    } else {
+    if (!data.success) {
       showToast(data.error, 'error');
+      return;
     }
+
+    state.currentEnrollment = { id: data.user.id, name: data.user.name };
+
+    elements.enrollStep1.classList.add('hidden');
+    elements.enrollStep2.classList.remove('hidden');
+    elements.captureCurrentNum.textContent = '0';
+    elements.captureProgressBar.style.width = '0%';
+    elements.guidanceText.textContent = GUIDANCE_STEPS[0];
+
+    elements.stepTicksContainer.querySelectorAll('.tick').forEach(t => t.classList.remove('active'));
+
+    showToast(`Enrollment initiated for ${name}. Position face in front of ESP32...`, 'info');
   } catch (err) {
     showToast('Failed to start enrollment', 'error');
   }
@@ -613,7 +888,6 @@ function updateRegistrationProgressUI(data) {
   const pct = Math.round((current / total) * 100);
   elements.captureProgressBar.style.width = `${pct}%`;
 
-  // Update ticks
   const ticks = elements.stepTicksContainer.querySelectorAll('.tick');
   ticks.forEach((t, idx) => {
     if (idx < current) {
@@ -623,12 +897,10 @@ function updateRegistrationProgressUI(data) {
     }
   });
 
-  // Update guidance
   const guideIdx = Math.min(current, GUIDANCE_STEPS.length - 1);
   elements.guidanceText.textContent = GUIDANCE_STEPS[guideIdx];
 }
 
-// Complete registration
 function completeRegistrationUI(data) {
   elements.enrollStep2.classList.add('hidden');
   elements.enrollStep3.classList.remove('hidden');
@@ -637,17 +909,17 @@ function completeRegistrationUI(data) {
   elements.summaryUserId.textContent = `#${data.id}`;
 }
 
-// Fail registration
 function failRegistrationUI(data) {
   showToast(`Enrollment failed: ${data.reason}`, 'error');
   closeEnrollModal();
 }
 
 // ============================================================================
-// Lightbox Modal
+// Lightbox Modal & Delete from Lightbox
 // ============================================================================
 
-window.openLightbox = function (imagePath, similarity, timeStr) {
+window.openLightbox = function (imagePath, similarity, timeStr, eventId = null) {
+  state.currentLightboxEventId = eventId;
   elements.lightboxImg.src = imagePath;
   elements.lightboxSimilarity.textContent = similarity;
   elements.lightboxTime.textContent = timeStr;
@@ -656,79 +928,229 @@ window.openLightbox = function (imagePath, similarity, timeStr) {
 
 elements.closeLightboxBtn.addEventListener('click', () => {
   elements.imageLightboxModal.classList.remove('active');
+  state.currentLightboxEventId = null;
 });
 
-// ============================================================================
-// Interactive Hardware Simulator Triggers
-// ============================================================================
-
-elements.simAuthPassBtn.addEventListener('click', async () => {
-  initAudio();
-  try {
-    await fetch('/api/simulator/trigger-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: 'authorized',
-        id: 1,
-        name: 'Ajeth',
-        similarity: (0.85 + Math.random() * 0.12).toFixed(3)
-      })
-    });
-    showToast('Simulated: Authorized face verified via physical GPIO 1', 'success');
-  } catch (err) {
-    showToast('Simulation trigger error', 'error');
-  }
-});
-
-elements.simAuthFailBtn.addEventListener('click', async () => {
-  initAudio();
-  try {
-    await fetch('/api/simulator/trigger-auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: 'denied',
-        similarity: (0.35 + Math.random() * 0.28).toFixed(3)
-      })
-    });
-    showToast('Simulated: Access denied (< 0.70 threshold)', 'error');
-  } catch (err) {
-    showToast('Simulation trigger error', 'error');
-  }
-});
-
-// Step simulator for enrollment
-elements.simStepBtn.addEventListener('click', () => {
-  const cur = Number(elements.captureCurrentNum.textContent) || 0;
-  if (cur < 10) {
-    const next = cur + 1;
-    handleIncomingEvent({
-      event: 'registration_progress',
-      data: {
-        id: state.currentEnrollment ? state.currentEnrollment.id : 1,
-        name: state.currentEnrollment ? state.currentEnrollment.name : 'Ajeth',
-        status: 'capturing',
-        embedding: next,
-        total: 10
-      }
-    });
-
-    if (next === 10) {
-      setTimeout(() => {
-        handleIncomingEvent({
-          event: 'registration_success',
-          data: {
-            id: state.currentEnrollment ? state.currentEnrollment.id : 1,
-            name: state.currentEnrollment ? state.currentEnrollment.name : 'Ajeth',
-            status: 'success',
-            embeddings: 10
-          }
-        });
-      }, 600);
+if (elements.lightboxDeleteBtn) {
+  elements.lightboxDeleteBtn.addEventListener('click', () => {
+    if (state.currentLightboxEventId) {
+      window.deleteLog(state.currentLightboxEventId);
+    } else {
+      showToast('No record ID attached to this snapshot', 'error');
     }
-  }
-});
+  });
+}
+
+// ============================================================================
+// Manual Unlock Trigger (per api.md Section 3)
+// ============================================================================
+
+if (elements.manualUnlockBtn) {
+  elements.manualUnlockBtn.addEventListener('click', async () => {
+    initAudio();
+    if (elements.doorStatusText) elements.doorStatusText.textContent = 'Door: Unlocking...';
+
+    try {
+      const res = await fetch('/api/smart-lock/unlock', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok || data.success) {
+        showToast('Manual unlock command sent to ESP32 (10s auto-relock)', 'success');
+        playSound('authorized');
+      } else {
+        showToast(data.error || 'Manual unlock failed', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to trigger door unlock', 'error');
+    }
+  });
+}
+
+// ============================================================================
+// SD Card Log & Profile Synchronization Modal
+// ============================================================================
+
+if (elements.openSyncModalBtn) {
+  elements.openSyncModalBtn.addEventListener('click', () => {
+    elements.syncModal.classList.add('active');
+  });
+}
+
+if (elements.closeSyncModalBtn) {
+  elements.closeSyncModalBtn.addEventListener('click', () => {
+    elements.syncModal.classList.remove('active');
+  });
+}
+
+if (elements.eventsDropzone && elements.eventsFileInput) {
+  elements.eventsDropzone.addEventListener('click', () => elements.eventsFileInput.click());
+
+  elements.eventsFileInput.addEventListener('change', () => {
+    const file = elements.eventsFileInput.files[0];
+    if (file) {
+      elements.eventsDropText.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      elements.uploadEventsBtn.disabled = false;
+    }
+  });
+
+  elements.eventsDropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    elements.eventsDropzone.classList.add('dragover');
+  });
+
+  elements.eventsDropzone.addEventListener('dragleave', () => {
+    elements.eventsDropzone.classList.remove('dragover');
+  });
+
+  elements.eventsDropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    elements.eventsDropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      elements.eventsFileInput.files = e.dataTransfer.files;
+      const file = e.dataTransfer.files[0];
+      elements.eventsDropText.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      elements.uploadEventsBtn.disabled = false;
+    }
+  });
+}
+
+if (elements.usersDropzone && elements.usersFileInput) {
+  elements.usersDropzone.addEventListener('click', () => elements.usersFileInput.click());
+
+  elements.usersFileInput.addEventListener('change', () => {
+    const file = elements.usersFileInput.files[0];
+    if (file) {
+      elements.usersDropText.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      elements.uploadUsersBtn.disabled = false;
+    }
+  });
+
+  elements.usersDropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    elements.usersDropzone.classList.add('dragover');
+  });
+
+  elements.usersDropzone.addEventListener('dragleave', () => {
+    elements.usersDropzone.classList.remove('dragover');
+  });
+
+  elements.usersDropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    elements.usersDropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      elements.usersFileInput.files = e.dataTransfer.files;
+      const file = e.dataTransfer.files[0];
+      elements.usersDropText.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      elements.uploadUsersBtn.disabled = false;
+    }
+  });
+}
+
+if (elements.uploadEventsBtn) {
+  elements.uploadEventsBtn.addEventListener('click', async () => {
+    const file = elements.eventsFileInput.files[0];
+    if (!file) {
+      showToast('Please select events.jsonl first', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    elements.uploadEventsBtn.disabled = true;
+    elements.uploadEventsBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ingesting Log...';
+
+    try {
+      const res = await fetch('/api/smart-lock/logs', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        showToast(data.error || 'Failed to process events log', 'error');
+        return;
+      }
+
+      showToast(`Processed ${data.total_records} events from ${data.filename}`, 'success');
+      displaySyncResults(data);
+      syncWithEndpoints(false);
+    } catch (err) {
+      showToast(`Upload error: ${err.message}`, 'error');
+    } finally {
+      elements.uploadEventsBtn.disabled = false;
+      elements.uploadEventsBtn.innerHTML = '<i class="fa-solid fa-upload"></i> Upload & Process Log';
+    }
+  });
+}
+
+if (elements.uploadUsersBtn) {
+  elements.uploadUsersBtn.addEventListener('click', async () => {
+    const file = elements.usersFileInput.files[0];
+    if (!file) {
+      showToast('Please select registered_users.json first', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    elements.uploadUsersBtn.disabled = true;
+    elements.uploadUsersBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Syncing Profiles...';
+
+    try {
+      const res = await fetch('/api/smart-lock/users', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        showToast(data.error || 'Failed to sync users file', 'error');
+        return;
+      }
+
+      showToast(`Synchronized ${data.user_count} profile(s) from ${data.filename}`, 'success');
+      syncWithEndpoints(false);
+    } catch (err) {
+      showToast(`Upload error: ${err.message}`, 'error');
+    } finally {
+      elements.uploadUsersBtn.disabled = false;
+      elements.uploadUsersBtn.innerHTML = '<i class="fa-solid fa-upload"></i> Upload & Sync Profiles';
+    }
+  });
+}
+
+function displaySyncResults(data) {
+  elements.syncResultsBox.classList.remove('hidden');
+  const sum = data.summary || {};
+
+  elements.syncStatsGrid.innerHTML = `
+    <div class="sync-stat-pill">
+      <span class="stat-label">Total Records</span>
+      <span class="stat-val">${data.total_records}</span>
+    </div>
+    <div class="sync-stat-pill">
+      <span class="stat-label">Authorized</span>
+      <span class="stat-val text-green">${sum.authentication_authorized || 0}</span>
+    </div>
+    <div class="sync-stat-pill">
+      <span class="stat-label">Denied</span>
+      <span class="stat-val text-red">${sum.authentication_denied || 0}</span>
+    </div>
+    <div class="sync-stat-pill">
+      <span class="stat-label">No Face Detected</span>
+      <span class="stat-val text-amber">${sum.authentication_no_face || 0}</span>
+    </div>
+    <div class="sync-stat-pill">
+      <span class="stat-label">Lock Cycles</span>
+      <span class="stat-val">${(sum.lock_unlocked || 0) + (sum.lock_locked || 0)}</span>
+    </div>
+    <div class="sync-stat-pill">
+      <span class="stat-label">Average Score</span>
+      <span class="stat-val">${sum.average_auth_score !== null ? sum.average_auth_score : 'N/A'}</span>
+    </div>
+  `;
+}
 
 elements.refreshUsersBtn.addEventListener('click', () => {
   fetchUsers();
@@ -743,14 +1165,12 @@ elements.soundToggleBtn.addEventListener('click', () => {
   showToast(state.soundEnabled ? 'Sound cues enabled' : 'Sound cues muted', 'info');
 });
 
-// Helper: timestamp formatting
 function formatTimestamp(isoStr) {
   if (!isoStr) return 'Just now';
   const d = new Date(isoStr);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-// Helper: HTML escaping
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -762,15 +1182,14 @@ function escapeHtml(str) {
 }
 
 // ============================================================================
-// Initialization
+// Initialization: Runs on Every Page Load / Manual Refresh
 // ============================================================================
 window.addEventListener('DOMContentLoaded', () => {
   connectWebSocket();
-  fetchStats();
-  fetchUsers();
-  fetchAuthHistory();
-  fetchIntruders();
 
-  // Periodic heartbeat
-  setInterval(fetchStats, 10000);
+  // Automatically retrieve files from endpoints & synchronize logs and profiles
+  syncWithEndpoints(true);
+
+  // Periodic heartbeat sync
+  setInterval(() => syncWithEndpoints(false), 15000);
 });
