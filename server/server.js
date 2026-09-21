@@ -87,15 +87,17 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Start Server
-server.listen(PORT, () => {
-  console.log(`----------------------------------------------------`);
-  console.log(`ESP32 Face Authentication Server running on port ${PORT}`);
-  console.log(`Dashboard:  http://localhost:${PORT}`);
-  console.log(`WebSocket:  ws://localhost:${PORT}/ws`);
-  console.log(`MQTT:       wss://iot.coreflux.cloud:443/mqtt`);
-  console.log(`Namespace:  847291/583104/`);
-  console.log(`----------------------------------------------------`);
-});
+// Start Server if run directly
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`----------------------------------------------------`);
+    console.log(`ESP32 Face Authentication Server running on port ${PORT}`);
+    console.log(`Dashboard:  http://localhost:${PORT}`);
+    console.log(`WebSocket:  ws://localhost:${PORT}/ws`);
+    console.log(`MQTT:       wss://iot.coreflux.cloud:443/mqtt`);
+    console.log(`Namespace:  847291/583104/`);
+    console.log(`----------------------------------------------------`);
+  });
+}
 
 module.exports = { app, server };

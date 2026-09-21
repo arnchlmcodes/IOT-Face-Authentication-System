@@ -53,7 +53,8 @@ client.on('connect', () => {
   // Subscribe to command topics
   client.subscribe([
     MQTT_TOPICS.commandRegister,
-    MQTT_TOPICS.commandDelete
+    MQTT_TOPICS.commandDelete,
+    MQTT_TOPICS.commandUnlock
   ], (err) => {
     if (err) {
       console.error('[ESP32 Simulator] Subscribe error:', err);
@@ -61,25 +62,49 @@ client.on('connect', () => {
       console.log(`[ESP32 Simulator] Listening on:`);
       console.log(` - ${MQTT_TOPICS.commandRegister}`);
       console.log(` - ${MQTT_TOPICS.commandDelete}`);
-      console.log(`\nReady. Type 'a' + Enter for Authorized Auth, 'd' for Denied Intruder Auth, 'q' to Quit.`);
+      console.log(` - ${MQTT_TOPICS.commandUnlock}`);
+      console.log(`\nReady. Type 'a' + Enter for Authorized Auth, 'd' for Denied Intruder Auth, 'u' for Manual Unlock, 'q' to Quit.`);
     }
   });
 });
 
 client.on('message', async (topic, payload) => {
   try {
-    const data = JSON.parse(payload.toString());
+    const data = payload && payload.length > 0 ? JSON.parse(payload.toString()) : {};
     console.log(`[ESP32 Simulator] Received command on [${topic}]:`, data);
 
     if (topic === MQTT_TOPICS.commandRegister) {
       await handleRegisterCommand(data);
     } else if (topic === MQTT_TOPICS.commandDelete) {
       await handleDeleteCommand(data);
+    } else if (topic === MQTT_TOPICS.commandUnlock) {
+      handleUnlockCommand();
     }
   } catch (err) {
     console.error('[ESP32 Simulator] Command parsing error:', err);
   }
 });
+
+function handleUnlockCommand() {
+  console.log('[ESP32 Simulator] Manual unlock requested: GPIO 2 HIGH (UNLOCKED)');
+  client.publish(MQTT_TOPICS.eventLock, JSON.stringify({
+    status: 'unlocked',
+    source: 'manual',
+    device_id: 'ESP32CAM_SIMULATOR',
+    timestamp: new Date().toISOString()
+  }));
+
+  // Automatic relock after 10 seconds per api.md Section 3.1
+  setTimeout(() => {
+    console.log('[ESP32 Simulator] Automatic relock timer expired: GPIO 2 LOW (LOCKED)');
+    client.publish(MQTT_TOPICS.eventLock, JSON.stringify({
+      status: 'locked',
+      source: 'auto',
+      device_id: 'ESP32CAM_SIMULATOR',
+      timestamp: new Date().toISOString()
+    }));
+  }, 10000);
+}
 
 // Handle Register Command: Simulate 10-step embedding capture
 async function handleRegisterCommand(data) {
@@ -161,7 +186,7 @@ function triggerSimulatedAuth(authorized = true) {
     }));
   } else {
     const similarity = +(0.35 + Math.random() * 0.28).toFixed(3);
-    console.log(`[ESP32 Simulator] Button pressed! Intruder face detected (${similarity} < 0.70)`);
+    console.log(`[ESP32 Simulator] Button pressed! Intruder face detected (${similarity} < 0.65)`);
 
     // 1. Publish denied auth event
     client.publish(MQTT_TOPICS.eventAuth, JSON.stringify({
@@ -169,6 +194,7 @@ function triggerSimulatedAuth(authorized = true) {
       id: -1,
       name: '',
       similarity: similarity,
+      threshold: 0.65,
       image_topic: MQTT_TOPICS.eventAuthImage,
       image_format: 'image/jpeg'
     }));

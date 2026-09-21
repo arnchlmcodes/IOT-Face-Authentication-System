@@ -120,6 +120,10 @@ function connectMQTT() {
         await handleAuthEvent(json);
         break;
 
+      case MQTT_TOPICS.eventLock:
+        await handleLockEvent(json);
+        break;
+
       default:
         console.log(`[MQTT] Unhandled topic: ${topic}`);
     }
@@ -227,48 +231,138 @@ async function handleDeletionEvent(data) {
   }
 }
 
-// Handler for authentication events (authorized / denied)
+// Handler for authentication events (authorized / denied per api.md Section 4)
 async function handleAuthEvent(data) {
-  const { status, id, name, similarity, reason } = data;
+  const {
+    status,
+    id,
+    name,
+    similarity,
+    first_similarity,
+    second_similarity,
+    threshold = 0.65,
+    embedding_delta,
+    source = 'face',
+    reason,
+    candidate_id,
+    candidate_name,
+    device_id = 'ESP32-S3-CAM-01',
+    timestamp
+  } = data;
+
+  const eventTimestamp = timestamp || new Date().toISOString();
 
   if (status === 'authorized') {
     const result = await db.run(
-      `INSERT INTO authentication_events (user_id, user_name, status, similarity, device_id)
-       VALUES (?, ?, 'authorized', ?, 'ESP32-S3-CAM-01')`,
-      [id, name, similarity]
+      `INSERT INTO authentication_events 
+       (user_id, user_name, status, similarity, first_similarity, second_similarity, threshold, embedding_delta, source, reason, device_id, created_at)
+       VALUES (?, ?, 'authorized', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        name,
+        similarity !== undefined ? similarity : 0.75,
+        first_similarity !== undefined ? first_similarity : null,
+        second_similarity !== undefined ? second_similarity : null,
+        threshold !== undefined ? threshold : 0.65,
+        embedding_delta !== undefined ? embedding_delta : null,
+        source || 'face',
+        reason || null,
+        device_id,
+        eventTimestamp
+      ]
     );
 
     broadcast('authentication_authorized', {
       id,
       name,
       status: 'authorized',
-      similarity,
+      similarity: similarity !== undefined ? similarity : 0.75,
+      first_similarity,
+      second_similarity,
+      threshold,
+      embedding_delta,
+      source,
       eventId: result.id,
-      timestamp: new Date().toISOString()
+      device_id,
+      timestamp: eventTimestamp
     });
   } else if (status === 'denied') {
-    // Record denied event
+    const displayName = candidate_name ? `Unrecognized (Candidate: ${candidate_name})` : 'Unknown / Intruder';
+    const finalReason = reason || 'Face does not meet authorization threshold';
+
     const result = await db.run(
-      `INSERT INTO authentication_events (user_id, user_name, status, similarity, device_id)
-       VALUES (NULL, 'Unknown / Intruder', 'denied', ?, 'ESP32-S3-CAM-01')`,
-      [similarity !== undefined ? similarity : 0.0]
+      `INSERT INTO authentication_events 
+       (user_id, user_name, status, similarity, first_similarity, second_similarity, threshold, embedding_delta, source, reason, device_id, created_at)
+       VALUES (?, ?, 'denied', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        candidate_id !== undefined && candidate_id !== -1 ? candidate_id : null,
+        displayName,
+        similarity !== undefined ? similarity : 0.0,
+        first_similarity !== undefined ? first_similarity : null,
+        second_similarity !== undefined ? second_similarity : null,
+        threshold !== undefined ? threshold : 0.65,
+        embedding_delta !== undefined ? embedding_delta : null,
+        source || 'face',
+        finalReason,
+        device_id,
+        eventTimestamp
+      ]
     );
 
     lastDeniedAuthEvent = {
       id: result.id,
       similarity,
-      reason: reason || 'Face not recognized',
-      timestamp: new Date().toISOString()
+      reason: finalReason,
+      timestamp: eventTimestamp
     };
 
     broadcast('authentication_denied', {
       status: 'denied',
       similarity,
-      reason: reason || 'Face does not meet authorization threshold',
+      first_similarity,
+      second_similarity,
+      threshold,
+      embedding_delta,
+      source,
+      reason: finalReason,
+      candidate_id,
+      candidate_name,
       eventId: result.id,
-      timestamp: new Date().toISOString()
+      device_id,
+      timestamp: eventTimestamp
     });
   }
+}
+
+// Handler for door lock status changes per api.md Section 3.1
+async function handleLockEvent(data) {
+  const { status, source, device_id = 'ESP32-S3-CAM-01', timestamp } = data;
+  console.log(`[MQTT] Door Lock event: status=${status}, source=${source}`);
+
+  // Also log lock action in authentication_events table as a system event
+  try {
+    await db.run(
+      `INSERT INTO authentication_events 
+       (user_name, status, source, event_type, device_id, created_at)
+       VALUES (?, ?, ?, 'lock', ?, ?)`,
+      [
+        source === 'manual' ? 'Manual Unlock' : (source === 'auto' ? 'Auto Relock' : 'Face Unlock'),
+        status, // 'unlocked' | 'locked'
+        source || 'system',
+        device_id,
+        timestamp || new Date().toISOString()
+      ]
+    );
+  } catch (err) {
+    console.warn('[MQTT] Failed to store lock event:', err.message);
+  }
+
+  broadcast('door_lock', {
+    status,
+    source,
+    device_id,
+    timestamp: timestamp || new Date().toISOString()
+  });
 }
 
 // Handler for raw binary JPEG
@@ -341,6 +435,15 @@ function publishDelete(id) {
   mqttClient.publish(MQTT_TOPICS.commandDelete, payload, { qos: 0 });
 }
 
+function publishUnlock() {
+  if (!mqttClient || !mqttClient.connected) {
+    throw new Error('MQTT broker is disconnected');
+  }
+
+  console.log(`[MQTT] Publishing manual unlock command to [${MQTT_TOPICS.commandUnlock}]: {}`);
+  mqttClient.publish(MQTT_TOPICS.commandUnlock, JSON.stringify({}), { qos: 0 });
+}
+
 function getStatus() {
   return {
     connectionStatus,
@@ -355,10 +458,12 @@ module.exports = {
   setWsBroadcast,
   publishRegister,
   publishDelete,
+  publishUnlock,
   getStatus,
   deviceState,
   handleAuthEvent,
   handleRegistrationEvent,
   handleDeletionEvent,
+  handleLockEvent,
   handleBinaryImage
 };

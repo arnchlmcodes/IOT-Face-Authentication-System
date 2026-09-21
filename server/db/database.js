@@ -70,11 +70,37 @@ async function initDB() {
       user_name TEXT,
       status TEXT NOT NULL,
       similarity REAL,
+      first_similarity REAL,
+      second_similarity REAL,
+      threshold REAL DEFAULT 0.65,
+      embedding_delta REAL,
+      source TEXT DEFAULT 'face',
+      reason TEXT,
+      event_type TEXT DEFAULT 'auth',
       image_path TEXT,
       device_id TEXT DEFAULT 'ESP32-S3-CAM-01',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migrate existing tables if columns don't exist
+  const extraColumns = [
+    { name: 'first_similarity', type: 'REAL' },
+    { name: 'second_similarity', type: 'REAL' },
+    { name: 'threshold', type: 'REAL DEFAULT 0.65' },
+    { name: 'embedding_delta', type: 'REAL' },
+    { name: 'source', type: 'TEXT DEFAULT "face"' },
+    { name: 'reason', type: 'TEXT' },
+    { name: 'event_type', type: 'TEXT DEFAULT "auth"' }
+  ];
+
+  for (const col of extraColumns) {
+    try {
+      await run(`ALTER TABLE authentication_events ADD COLUMN ${col.name} ${col.type}`);
+    } catch (e) {
+      // Column already exists or table was just created
+    }
+  }
 
   await run(`
     CREATE TABLE IF NOT EXISTS devices (

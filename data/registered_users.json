@@ -1,0 +1,18 @@
+{
+  "device_id": "ESP32CAM_847291",
+  "user_count": 2,
+  "updated_at": "2026-09-20T03:55:10Z",
+  "updated_at_epoch": 1789857310,
+  "users": [
+    {
+      "id": 1,
+      "name": "Ajeth",
+      "embedding_count": 10
+    },
+    {
+      "id": 2,
+      "name": "OBAMA",
+      "embedding_count": 10
+    }
+  ]
+}

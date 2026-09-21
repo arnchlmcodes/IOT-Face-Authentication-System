@@ -1246,3 +1246,229 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ==========================================================================
+   Log Deletion & SD Sync Enhancements (api.md Alignment)
+   ========================================================================== */
+
+/* Delete Log Item Button in Live Stream Feed */
+.btn-delete-log-item {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  font-size: 0.8rem;
+}
+
+.btn-delete-log-item:hover {
+  background-color: var(--color-red-subtle);
+  border-color: var(--color-red-border);
+  color: var(--color-red);
+}
+
+/* Delete Trash Button on Intruder Card Overlay */
+.intruder-trash-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background-color: rgba(11, 14, 20, 0.75);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  cursor: pointer;
+  z-index: 5;
+  transition: all 150ms ease;
+  opacity: 0.8;
+}
+
+.intruder-trash-btn:hover {
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+  color: #ffffff;
+  opacity: 1;
+}
+
+/* Lock Event Item in Access Feed */
+.feed-avatar.lock {
+  background-color: var(--color-blue-subtle);
+  color: var(--color-blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.auth-feed-item.lock {
+  border-left: 3px solid var(--color-blue);
+}
+
+.sim-sub-detail {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* SD Card Sync Modal */
+.sync-modal-dialog {
+  max-width: 580px;
+}
+
+.sync-modal-body {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sync-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .sync-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sync-card {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sync-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.sync-card-icon {
+  font-size: 1.25rem;
+}
+
+.sync-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.sync-dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 1.25rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  background-color: var(--bg-box);
+  transition: all 150ms ease;
+}
+
+.sync-dropzone:hover,
+.sync-dropzone.dragover {
+  border-color: var(--color-blue);
+  background-color: var(--bg-box-hover);
+}
+
+.drop-icon {
+  font-size: 1.5rem;
+  color: var(--color-blue);
+}
+
+.drop-text {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.drop-text code {
+  font-family: var(--font-mono);
+  color: var(--text-white);
+  background-color: var(--bg-box-nested);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.text-amber {
+  color: var(--color-amber);
+}
+
+/* Sync Results Box */
+.sync-results-box {
+  padding: 1rem;
+  border-color: var(--color-green-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sync-results-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sync-results-header h4 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-white);
+}
+
+.sync-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+}
+
+@media (max-width: 480px) {
+  .sync-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.sync-stat-pill {
+  background-color: var(--bg-box);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-val {
+  font-size: 0.92rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-white);
+}

@@ -46,6 +46,24 @@
           <span id="deviceStatusText">ESP32: Ready</span>
         </div>
 
+        <!-- Door Lock Status Pill -->
+        <div class="status-pill dashboard-box-nested" id="doorStatusPill">
+          <i class="fa-solid fa-lock" id="doorLockIcon"></i>
+          <span id="doorStatusText">Door: Locked</span>
+        </div>
+
+        <!-- Door Unlock Manual Action -->
+        <button class="btn btn-outline" id="manualUnlockBtn" title="Manual Door Unlock via MQTT (10s auto-relock)">
+          <i class="fa-solid fa-lock-open"></i>
+          <span>Unlock</span>
+        </button>
+
+        <!-- SD Card Log Sync Button -->
+        <button class="btn btn-outline" id="openSyncModalBtn" title="Synchronize logs & users from SD card files">
+          <i class="fa-solid fa-sd-card"></i>
+          <span>Sync SD Logs</span>
+        </button>
+
         <!-- Sound Toggle Button -->
         <button class="icon-btn dashboard-box-nested" id="soundToggleBtn" title="Toggle Sound Feedback" aria-label="Toggle Sound">
           <i class="fa-solid fa-volume-high" id="soundIcon"></i>
@@ -128,14 +146,8 @@
               <h3 class="card-title">Device Telemetry</h3>
               <span class="badge badge-online" id="camBadgeOnline">Online</span>
             </div>
-            <div class="sim-group">
-              <span class="sim-label">Test Simulator:</span>
-              <button class="btn btn-sm btn-outline-success" id="simAuthPassBtn" title="Simulate Authorized Verification">
-                <i class="fa-solid fa-check"></i> Grant Access
-              </button>
-              <button class="btn btn-sm btn-outline-danger" id="simAuthFailBtn" title="Simulate Denied Verification">
-                <i class="fa-solid fa-xmark"></i> Deny Access
-              </button>
+            <div class="firmware-tag">
+              <span class="text-muted"><i class="fa-solid fa-code-branch"></i> MNP01 112×112 Pipeline</span>
             </div>
           </div>
 
@@ -150,7 +162,7 @@
             </div>
             <div class="telemetry-box dashboard-box-nested">
               <span class="tele-label">Match Threshold</span>
-              <span class="tele-value">0.70 Cosine</span>
+              <span class="tele-value" id="telemetryThreshold">0.65 Cosine (65%)</span>
             </div>
             <div class="telemetry-box dashboard-box-nested">
               <span class="tele-label">Vector Dimension</span>
@@ -166,7 +178,15 @@
               <i class="fa-solid fa-clock-rotate-left title-icon"></i>
               <h3 class="card-title">Live Access Log</h3>
             </div>
-            <span class="live-pill"><span class="ping-dot"></span> Live Stream</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button class="btn btn-sm btn-outline" id="refreshFeedBtn" title="Sync and refresh logs from endpoint">
+                <i class="fa-solid fa-arrows-rotate"></i> Sync
+              </button>
+              <button class="btn btn-sm btn-outline-danger" id="clearAllLogsBtn" title="Clear all access logs & images">
+                <i class="fa-solid fa-trash-can"></i> Clear All
+              </button>
+              <span class="live-pill"><span class="ping-dot"></span> Live Stream</span>
+            </div>
           </div>
 
           <div class="auth-feed-list" id="authFeedList">
@@ -311,9 +331,7 @@
           </div>
 
           <div class="modal-footer justify-center">
-            <button type="button" class="btn btn-sm btn-outline" id="simStepBtn">
-              <i class="fa-solid fa-forward-step"></i> Simulate Next Sample
-            </button>
+            <span class="text-muted"><i class="fa-solid fa-camera fa-fade"></i> ESP32 camera active — keep face centered</span>
           </div>
         </div>
       </div>
@@ -377,12 +395,105 @@
           </div>
           <div class="meta-row">
             <span class="meta-label">Decision</span>
-            <span class="badge badge-denied">Denied (Threshold: 0.70)</span>
+            <span class="badge badge-denied">Denied (Threshold: 0.65)</span>
           </div>
           <div class="meta-row">
             <span class="meta-label">Device</span>
             <span class="meta-val">ESP32-S3-CAM Access Terminal</span>
           </div>
+          <div class="meta-row" style="margin-top: 1rem; border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
+            <button type="button" class="btn btn-sm btn-outline-danger" id="lightboxDeleteBtn" style="width: 100%;">
+              <i class="fa-solid fa-trash-can"></i> Delete Log Entry & Image
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SD Card Log Synchronization Modal -->
+  <div class="modal-backdrop" id="syncModal">
+    <div class="modal-dialog dashboard-box sync-modal-dialog">
+      <div class="modal-header">
+        <div class="header-title-wrap">
+          <i class="fa-solid fa-sd-card title-icon"></i>
+          <h3 class="modal-title">SD Card Log & Profile Synchronization</h3>
+        </div>
+        <button class="modal-close-btn" id="closeSyncModalBtn" aria-label="Close dialog">&times;</button>
+      </div>
+
+      <div class="sync-modal-body">
+        <p class="modal-desc">Upload SD-card logs (<code>events.jsonl</code>) and user metadata (<code>registered_users.json</code>) to synchronize the system logs and enrolled profiles with your ESP32-S3 terminal.</p>
+
+        <div class="sync-grid">
+          <!-- File 1: events.jsonl -->
+          <div class="sync-card dashboard-box-nested">
+            <div class="sync-card-header">
+              <i class="fa-solid fa-file-lines sync-card-icon text-blue"></i>
+              <div>
+                <strong>events.jsonl</strong>
+                <span class="sync-hint">Structured JSON Lines event log</span>
+              </div>
+            </div>
+            <div class="sync-dropzone" id="eventsDropzone">
+              <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+              <p class="drop-text" id="eventsDropText">Click to select <code>events.jsonl</code></p>
+              <input type="file" id="eventsFileInput" accept=".jsonl,.txt,.json" class="hidden-file-input">
+            </div>
+            <button class="btn btn-sm btn-primary w-full" id="uploadEventsBtn" disabled>
+              <i class="fa-solid fa-upload"></i> Upload & Process Log
+            </button>
+          </div>
+
+          <!-- File 2: registered_users.json -->
+          <div class="sync-card dashboard-box-nested">
+            <div class="sync-card-header">
+              <i class="fa-solid fa-users-gear sync-card-icon text-green"></i>
+              <div>
+                <strong>registered_users.json</strong>
+                <span class="sync-hint">User database metadata file</span>
+              </div>
+            </div>
+            <div class="sync-dropzone" id="usersDropzone">
+              <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+              <p class="drop-text" id="usersDropText">Click to select <code>registered_users.json</code></p>
+              <input type="file" id="usersFileInput" accept=".json" class="hidden-file-input">
+            </div>
+            <button class="btn btn-sm btn-primary w-full" id="uploadUsersBtn" disabled>
+              <i class="fa-solid fa-upload"></i> Upload & Sync Profiles
+            </button>
+          </div>
+        </div>
+
+        <!-- Sync Results Summary Display -->
+        <div class="sync-results-box dashboard-box-nested hidden" id="syncResultsBox">
+          <div class="sync-results-header">
+            <i class="fa-solid fa-circle-check text-green"></i>
+            <h4 id="syncResultsTitle">Processing Summary</h4>
+          </div>
+          <div class="sync-stats-grid" id="syncStatsGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Delete Confirmation Modal (Reliable in-app modal, never blocked by browser) -->
+  <div class="modal-backdrop" id="deleteConfirmModal">
+    <div class="modal-dialog dashboard-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="header-title-wrap">
+          <i class="fa-solid fa-triangle-exclamation text-red title-icon"></i>
+          <h3 class="modal-title" id="deleteConfirmTitle">Confirm Deletion</h3>
+        </div>
+        <button class="modal-close-btn" id="closeDeleteModalBtn" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+        <p class="modal-desc" id="deleteConfirmText">Are you sure you want to permanently delete this log entry and its associated snapshot image from the system?</p>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border-box); margin-top: 0.5rem;">
+          <button type="button" class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirmDeleteActionBtn">
+            <i class="fa-solid fa-trash-can"></i> <span id="confirmDeleteBtnText">Delete</span>
+          </button>
         </div>
       </div>
     </div>
