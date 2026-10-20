@@ -14,18 +14,12 @@ const state = {
   audioCtx: null
 };
 
-// Posture Prompts for 10-step embedding capture
+// Posture Prompts for 3-step embedding capture
 const GUIDANCE_STEPS = [
   "Look straight at the ESP32 camera lens...",
-  "Keep your head steady...",
-  "Tilt your head slightly to the right...",
-  "Tilt your head slightly to the left...",
-  "Raise your chin slightly upwards...",
-  "Lower your chin slightly...",
-  "Slight facial expression (smile or neutral)...",
-  "Hold steady for fine feature extraction...",
-  "Almost complete, final embedding capture...",
-  "Writing 10 face embeddings to MicroSD..."
+  "Keep head steady, capturing sample 2...",
+  "Slight facial angle change for sample 3...",
+  "Writing 3 face embeddings to MicroSD..."
 ];
 
 // Initialize Audio Context on first interaction
@@ -252,7 +246,7 @@ function handleIncomingEvent(msg) {
         similarity: data.similarity,
         first_similarity: data.first_similarity,
         second_similarity: data.second_similarity,
-        threshold: data.threshold || 0.65,
+        threshold: data.threshold || 0.70,
         embedding_delta: data.embedding_delta,
         source: data.source || 'face',
         created_at: data.timestamp
@@ -270,7 +264,7 @@ function handleIncomingEvent(msg) {
         similarity: data.similarity,
         first_similarity: data.first_similarity,
         second_similarity: data.second_similarity,
-        threshold: data.threshold || 0.65,
+        threshold: data.threshold || 0.70,
         embedding_delta: data.embedding_delta,
         reason: data.reason,
         source: data.source || 'face',
@@ -413,7 +407,7 @@ function renderUsersTable(users) {
       <td style="font-weight: 600;">${escapeHtml(user.name)}</td>
       <td>
         <span class="user-samples-badge">
-          <i class="fa-solid fa-cube"></i> ${user.samples || 10}/10 Embeddings
+          <i class="fa-solid fa-cube"></i> ${user.samples || 3}/3 Embeddings
         </span>
       </td>
       <td>
@@ -665,9 +659,9 @@ function renderAuthFeedItem(evt, prepend = false) {
   if (isLock) {
     metaText = `Door ${evt.status} (${evt.source || 'system'}) • ${formattedTime}`;
   } else if (isAuth) {
-    metaText = `User ID #${evt.user_id || 1} • Match: 65% • ${formattedTime}`;
+    metaText = `User ID #${evt.user_id || 1} • Match: 70% • ${formattedTime}`;
   } else {
-    metaText = `Threshold: 0.65 • ${evt.reason ? escapeHtml(evt.reason) : 'Unrecognized Face'} • ${formattedTime}`;
+    metaText = `Threshold: 0.70 • ${evt.reason ? escapeHtml(evt.reason) : 'Unrecognized Face'} • ${formattedTime}`;
   }
 
   let extraSimDetails = '';
@@ -877,10 +871,10 @@ elements.enrollForm.addEventListener('submit', async (e) => {
   }
 });
 
-// Update UI during 10-step capture
+// Update UI during 3-step capture
 function updateRegistrationProgressUI(data) {
   const current = data.embedding || 0;
-  const total = data.total || 10;
+  const total = data.total || 3;
 
   elements.captureCurrentNum.textContent = current;
   elements.captureTotalNum.textContent = total;

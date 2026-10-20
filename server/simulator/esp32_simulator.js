@@ -1,6 +1,6 @@
 /**
  * ESP32-S3-CAM Firmware Hardware Simulator
- * Simulates physical button (GPIO 1), camera capture, 10-step face registration,
+ * Simulates physical button (GPIO 1), camera capture, 3-step face registration,
  * and binary JPEG streaming over MQTT WSS.
  */
 
@@ -24,7 +24,7 @@ const client = mqtt.connect(MQTT_TOPICS.brokerUrl, {
 
 let isBusy = false;
 const registeredUsers = new Map();
-registeredUsers.set(1, { id: 1, name: 'Ajeth', samples: 10 });
+registeredUsers.set(1, { id: 1, name: 'Ajeth', samples: 3 });
 
 // Generate a minimal valid JPEG binary buffer for intruder test frames
 function generateMockJpegBuffer(timestamp) {
@@ -106,7 +106,7 @@ function handleUnlockCommand() {
   }, 10000);
 }
 
-// Handle Register Command: Simulate 10-step embedding capture
+// Handle Register Command: Simulate 3-step embedding capture
 async function handleRegisterCommand(data) {
   const { id, name } = data;
 
@@ -124,22 +124,22 @@ async function handleRegisterCommand(data) {
   isBusy = true;
   console.log(`[ESP32 Simulator] Starting face capture for ${name} (ID: ${id})...`);
 
-  for (let step = 1; step <= 10; step++) {
+  for (let step = 1; step <= 3; step++) {
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    console.log(`[ESP32 Simulator] Embedding ${step}/10 captured.`);
+    console.log(`[ESP32 Simulator] Embedding ${step}/3 captured.`);
     client.publish(MQTT_TOPICS.eventRegistration, JSON.stringify({
       id,
       name,
       status: 'capturing',
       embedding: step,
-      total: 10
+      total: 3
     }));
   }
 
   // Final Success
   await new Promise(resolve => setTimeout(resolve, 600));
-  registeredUsers.set(id, { id, name, samples: 10 });
+  registeredUsers.set(id, { id, name, samples: 3 });
   isBusy = false;
 
   console.log(`[ESP32 Simulator] Face enrollment completed and written to MicroSD!`);
@@ -147,7 +147,7 @@ async function handleRegisterCommand(data) {
     id,
     name,
     status: 'success',
-    embeddings: 10
+    embeddings: 3
   }));
 }
 
@@ -186,7 +186,7 @@ function triggerSimulatedAuth(authorized = true) {
     }));
   } else {
     const similarity = +(0.35 + Math.random() * 0.28).toFixed(3);
-    console.log(`[ESP32 Simulator] Button pressed! Intruder face detected (${similarity} < 0.65)`);
+    console.log(`[ESP32 Simulator] Button pressed! Intruder face detected (${similarity} < 0.70)`);
 
     // 1. Publish denied auth event
     client.publish(MQTT_TOPICS.eventAuth, JSON.stringify({
@@ -194,7 +194,7 @@ function triggerSimulatedAuth(authorized = true) {
       id: -1,
       name: '',
       similarity: similarity,
-      threshold: 0.65,
+      threshold: 0.70,
       image_topic: MQTT_TOPICS.eventAuthImage,
       image_format: 'image/jpeg'
     }));

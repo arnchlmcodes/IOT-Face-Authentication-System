@@ -73,7 +73,7 @@ const getLogsHandler = async (req, res) => {
                 sim,
                 payload.first_similarity || null,
                 payload.second_similarity || null,
-                payload.threshold || 0.65,
+                payload.threshold || 0.70,
                 payload.embedding_delta || null,
                 payload.source || 'face',
                 payload.reason || null,
@@ -145,7 +145,7 @@ const getLogsHandler = async (req, res) => {
         similarity: evt.similarity,
         first_similarity: evt.first_similarity,
         second_similarity: evt.second_similarity,
-        threshold: evt.threshold || 0.65,
+        threshold: evt.threshold || 0.70,
         embedding_delta: evt.embedding_delta,
         source: evt.source,
         reason: evt.reason,
@@ -215,7 +215,7 @@ router.post('/smart-lock/sync', async (req, res) => {
               sim,
               payload.first_similarity || null,
               payload.second_similarity || null,
-              payload.threshold || 0.65,
+              payload.threshold || 0.70,
               payload.embedding_delta || null,
               payload.source || 'face',
               payload.reason || null,
@@ -235,9 +235,9 @@ router.post('/smart-lock/sync', async (req, res) => {
           if (!u.id || !u.name) continue;
           const existing = await db.get(`SELECT id FROM users WHERE id = ?`, [u.id]);
           if (existing) {
-            await db.run(`UPDATE users SET name = ?, status = 'registered', samples = ?, deleted_at = NULL WHERE id = ?`, [u.name, u.embedding_count || 10, u.id]);
+            await db.run(`UPDATE users SET name = ?, status = 'registered', samples = ?, deleted_at = NULL WHERE id = ?`, [u.name, u.embedding_count || 3, u.id]);
           } else {
-            await db.run(`INSERT INTO users (id, name, status, samples) VALUES (?, ?, 'registered', ?)`, [u.id, u.name, u.embedding_count || 10]);
+            await db.run(`INSERT INTO users (id, name, status, samples) VALUES (?, ?, 'registered', ?)`, [u.id, u.name, u.embedding_count || 3]);
           }
           usersSynced++;
         }
@@ -326,7 +326,7 @@ router.post('/smart-lock/logs', upload.single('file'), async (req, res) => {
     let firstSim = payload.first_similarity !== undefined ? payload.first_similarity : null;
     let secondSim = payload.second_similarity !== undefined ? payload.second_similarity : null;
     let sim = payload.similarity !== undefined ? payload.similarity : (payload.verification_similarity !== undefined ? payload.verification_similarity : null);
-    let threshold = payload.threshold !== undefined ? payload.threshold : 0.65;
+    let threshold = payload.threshold !== undefined ? payload.threshold : 0.70;
     let delta = payload.embedding_delta !== undefined ? payload.embedding_delta : null;
     let reason = payload.reason || record.reason || null;
 
@@ -489,12 +489,12 @@ router.post('/smart-lock/users', upload.single('file'), async (req, res) => {
       if (existing) {
         await db.run(
           `UPDATE users SET name = ?, status = 'registered', samples = ?, deleted_at = NULL WHERE id = ?`,
-          [u.name, u.embedding_count || 10, u.id]
+          [u.name, u.embedding_count || 3, u.id]
         );
       } else {
         await db.run(
           `INSERT INTO users (id, name, status, samples) VALUES (?, ?, 'registered', ?)`,
-          [u.id, u.name, u.embedding_count || 10]
+          [u.id, u.name, u.embedding_count || 3]
         );
       }
     }
@@ -739,7 +739,7 @@ router.post('/users', async (req, res) => {
 
     const jobResult = await db.run(
       `INSERT INTO registration_jobs (user_id, status, embeddings_captured, total_embeddings)
-       VALUES (?, 'requested', 0, 10)`,
+       VALUES (?, 'requested', 0, 3)`,
       [id]
     );
 

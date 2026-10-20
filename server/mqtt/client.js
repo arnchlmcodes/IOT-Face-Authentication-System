@@ -132,7 +132,7 @@ function connectMQTT() {
 
 // Handler for registration progress, success, or failure
 async function handleRegistrationEvent(data) {
-  const { id, name, status, embedding, total = 10, embeddings, reason } = data;
+  const { id, name, status, embedding, total = 3, embeddings, reason } = data;
 
   if (status === 'capturing') {
     deviceState.isBusy = true;
@@ -164,7 +164,7 @@ async function handleRegistrationEvent(data) {
     // Update user record in DB
     await db.run(
       `UPDATE users SET status = 'registered', samples = ?, deleted_at = NULL WHERE id = ?`,
-      [embeddings || total || 10, id]
+      [embeddings || total || 3, id]
     );
 
     // Update registration job
@@ -172,14 +172,14 @@ async function handleRegistrationEvent(data) {
       `UPDATE registration_jobs 
        SET status = 'success', embeddings_captured = ?, completed_at = CURRENT_TIMESTAMP 
        WHERE user_id = ? AND status IN ('requested', 'capturing')`,
-      [embeddings || total || 10, id]
+      [embeddings || total || 3, id]
     );
 
     broadcast('registration_success', {
       id,
       name,
       status: 'success',
-      embeddings: embeddings || total || 10
+      embeddings: embeddings || total || 3
     });
   } else if (status === 'failed') {
     deviceState.isBusy = false;
@@ -240,7 +240,7 @@ async function handleAuthEvent(data) {
     similarity,
     first_similarity,
     second_similarity,
-    threshold = 0.65,
+    threshold = 0.70,
     embedding_delta,
     source = 'face',
     reason,
@@ -263,7 +263,7 @@ async function handleAuthEvent(data) {
         similarity !== undefined ? similarity : 0.75,
         first_similarity !== undefined ? first_similarity : null,
         second_similarity !== undefined ? second_similarity : null,
-        threshold !== undefined ? threshold : 0.65,
+        threshold !== undefined ? threshold : 0.70,
         embedding_delta !== undefined ? embedding_delta : null,
         source || 'face',
         reason || null,
@@ -300,7 +300,7 @@ async function handleAuthEvent(data) {
         similarity !== undefined ? similarity : 0.0,
         first_similarity !== undefined ? first_similarity : null,
         second_similarity !== undefined ? second_similarity : null,
-        threshold !== undefined ? threshold : 0.65,
+        threshold !== undefined ? threshold : 0.70,
         embedding_delta !== undefined ? embedding_delta : null,
         source || 'face',
         finalReason,

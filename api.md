@@ -58,8 +58,8 @@ Example progress event:
   "id": 1,
   "name": "Ajeth",
   "status": "capturing",
-  "embedding": 3,
-  "total": 10
+  "embedding": 2,
+  "total": 3
 }
 ```
 Example success event:
@@ -68,7 +68,7 @@ Example success event:
   "id": 1,
   "name": "Ajeth",
   "status": "success",
-  "embeddings": 10
+  "embeddings": 3
 }
 ```
 Failure events include a `reason`, for example:
@@ -199,7 +199,7 @@ Example:
   "similarity": 0.7481,
   "first_similarity": 0.7498,
   "second_similarity": 0.7481,
-  "threshold": 0.60,
+  "threshold": 0.70,
   "embedding_delta": 0.081777,
   "source": "face"
 }
@@ -228,7 +228,7 @@ Example:
   "verification_similarity": 0.5234,
   "first_similarity": 0.5234,
   "second_similarity": null,
-  "threshold": 0.60,
+  "threshold": 0.70,
   "embedding_delta": 0.0,
   "image_topic": "847291/583104/event/auth/image",
   "image_format": "image/jpeg",
@@ -292,7 +292,7 @@ Example MQTT log record:
     "name": "Ajeth",
     "first_similarity": 0.7498,
     "second_similarity": 0.7481,
-    "threshold": 0.60,
+    "threshold": 0.70,
     "embedding_delta": 0.081777,
     "source": "face"
   }
@@ -559,7 +559,7 @@ Automatic relock
 Face threshold
 Current firmware configuration:
 ```text
-FACE_THRESHOLD = 0.60
+FACE_THRESHOLD = 0.70
 ```
 Second-frame verification
 The current authentication flow uses two fresh face embeddings when the first profile match passes the threshold.

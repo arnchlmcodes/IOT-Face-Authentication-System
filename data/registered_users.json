@@ -7,12 +7,12 @@
     {
       "id": 1,
       "name": "Ajeth",
-      "embedding_count": 10
+      "embedding_count": 3
     },
     {
       "id": 2,
       "name": "OBAMA",
-      "embedding_count": 10
+      "embedding_count": 3
     }
   ]
 }

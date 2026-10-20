@@ -44,7 +44,7 @@ async function initDB() {
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
       status TEXT DEFAULT 'registered',
-      samples INTEGER DEFAULT 10,
+      samples INTEGER DEFAULT 3,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at DATETIME
     )
@@ -56,7 +56,7 @@ async function initDB() {
       user_id INTEGER NOT NULL,
       status TEXT NOT NULL,
       embeddings_captured INTEGER DEFAULT 0,
-      total_embeddings INTEGER DEFAULT 10,
+      total_embeddings INTEGER DEFAULT 3,
       failure_reason TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME
@@ -72,7 +72,7 @@ async function initDB() {
       similarity REAL,
       first_similarity REAL,
       second_similarity REAL,
-      threshold REAL DEFAULT 0.65,
+      threshold REAL DEFAULT 0.70,
       embedding_delta REAL,
       source TEXT DEFAULT 'face',
       reason TEXT,
@@ -87,7 +87,7 @@ async function initDB() {
   const extraColumns = [
     { name: 'first_similarity', type: 'REAL' },
     { name: 'second_similarity', type: 'REAL' },
-    { name: 'threshold', type: 'REAL DEFAULT 0.65' },
+    { name: 'threshold', type: 'REAL DEFAULT 0.70' },
     { name: 'embedding_delta', type: 'REAL' },
     { name: 'source', type: 'TEXT DEFAULT "face"' },
     { name: 'reason', type: 'TEXT' },
@@ -129,7 +129,7 @@ async function initDB() {
   if (userCount.count === 0) {
     await run(`
       INSERT INTO users (id, name, status, samples)
-      VALUES (1, 'Ajeth', 'registered', 10)
+      VALUES (1, 'Ajeth', 'registered', 3)
     `);
 
     // Sample initial authorized event

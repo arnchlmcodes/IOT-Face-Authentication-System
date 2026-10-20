@@ -162,7 +162,7 @@
             </div>
             <div class="telemetry-box dashboard-box-nested">
               <span class="tele-label">Match Threshold</span>
-              <span class="tele-value" id="telemetryThreshold">0.65 Cosine (65%)</span>
+              <span class="tele-value" id="telemetryThreshold">0.70 Cosine (70%)</span>
             </div>
             <div class="telemetry-box dashboard-box-nested">
               <span class="tele-label">Vector Dimension</span>
@@ -271,7 +271,7 @@
 
       <!-- Step 1: Input Form -->
       <div class="modal-step" id="enrollStep1">
-        <p class="modal-desc">Enter the user details. The ESP32-S3 camera will capture 10 facial angle samples to generate the biometric embeddings vector.</p>
+        <p class="modal-desc">Enter the user details. The ESP32-S3 camera will capture 3 facial angle samples to generate the biometric embeddings vector.</p>
 
         <form id="enrollForm">
           <div class="form-group">
@@ -301,22 +301,15 @@
           <div class="progress-counter">
             <span class="counter-num" id="captureCurrentNum">0</span>
             <span class="counter-slash">/</span>
-            <span class="counter-total" id="captureTotalNum">10</span>
+            <span class="counter-total" id="captureTotalNum">3</span>
           </div>
           <span class="counter-label">Biometric Samples Captured</span>
 
-          <!-- 10 Step Indicators -->
+          <!-- 3 Step Indicators -->
           <div class="step-ticks" id="stepTicksContainer">
             <span class="tick dashboard-box-nested">1</span>
             <span class="tick dashboard-box-nested">2</span>
             <span class="tick dashboard-box-nested">3</span>
-            <span class="tick dashboard-box-nested">4</span>
-            <span class="tick dashboard-box-nested">5</span>
-            <span class="tick dashboard-box-nested">6</span>
-            <span class="tick dashboard-box-nested">7</span>
-            <span class="tick dashboard-box-nested">8</span>
-            <span class="tick dashboard-box-nested">9</span>
-            <span class="tick dashboard-box-nested">10</span>
           </div>
 
           <!-- Progress Bar -->
@@ -343,7 +336,7 @@
             <i class="fa-solid fa-check"></i>
           </div>
           <h4 class="success-title">Enrollment Complete</h4>
-          <p class="modal-desc" id="successMessageText">10 face samples have been saved to the device database.</p>
+          <p class="modal-desc" id="successMessageText">3 face samples have been saved to the device database.</p>
 
           <div class="summary-card dashboard-box-nested">
             <div class="summary-row">
@@ -356,7 +349,7 @@
             </div>
             <div class="summary-row">
               <span class="summary-label">Biometric Embeddings</span>
-              <span class="text-green font-medium">10 of 10 Stored</span>
+              <span class="text-green font-medium">3 of 3 Stored</span>
             </div>
           </div>
 
@@ -395,7 +388,7 @@
           </div>
           <div class="meta-row">
             <span class="meta-label">Decision</span>
-            <span class="badge badge-denied">Denied (Threshold: 0.65)</span>
+            <span class="badge badge-denied">Denied (Threshold: 0.70)</span>
           </div>
           <div class="meta-row">
             <span class="meta-label">Device</span>

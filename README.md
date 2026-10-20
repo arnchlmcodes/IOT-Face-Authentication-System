@@ -31,7 +31,7 @@ ESP32-S3-CAM (Physical Device)
 - WebSocket hub for real-time event streaming to the dashboard
 - SQLite database for persistent storage of users, registration jobs, and auth events
 - Binary JPEG pipeline for capturing and storing denied authentication images
-- 10-step face enrollment flow with live progress tracking
+- 3-step face enrollment flow with live progress tracking
 - Built-in ESP32 hardware simulator for testing without physical hardware
 - Intruder gallery with captured snapshots from denied access attempts
 
